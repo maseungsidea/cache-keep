@@ -32,26 +32,33 @@ On a subscription, the main conversation's prompt cache lives for 1 hour. Some a
 
 ## How it compares
 
-Checked against cache mods found via claudemods.dev and GitHub as of 2026-10-22 (cache-clock 0.1.1, cache-tax 2.3.1, cache-warmer), from their source.
+Checked against cache mods found via claudemods.dev and GitHub as of 2026-10-22 (cache-clock 0.1.1, cache-tax 2.3.1, cache-warmer, token-optimizer 5.13.57), from their source.
 
-| | cache-keep | cache-clock | cache-tax | cache-warmer |
-|---|---|---|---|---|
-| Model calls | none | none | keep-warm pings: opt-in, auto-arms 3h after a cold write | keep-warm pings, always on |
-| Edits your settings | no (`$.ui.status`) | yes, wraps your `statusLine` | no | no |
-| Blocks a message | no | no | first cold message, once (guard) | no |
-| Detects a 5-minute TTL drop | **yes** | no | no (assumes 60 min) | no (configurable, default 60 min) |
-| Reads usage | per API request (`turn.step`) | status-line input | per API request (`turn.step`) | per turn (`turn.complete`) |
-| Shows | time left, context size, hit rate, misses, rewritten tokens; `/cache-keep` report | time left, hit rate, misses, tokens to re-cache | cold-write cost in USD | — |
+| | cache-keep | cache-clock | cache-tax | cache-warmer | token-optimizer |
+|---|---|---|---|---|---|
+| Model calls | none | none | keep-warm pings: opt-in, auto-arms 3h after a cold write | keep-warm pings, always on | one per **Keep warm** press, never on a timer |
+| Edits your settings | no (`$.ui.status`) | yes, wraps your `statusLine` | no | no | yes, installs its own `statusLine` and restores it each session |
+| Blocks a message | no | no | first cold message, once (guard) | no | no |
+| Detects a 5-minute TTL drop | yes, inferred; one alarm toast | no | no (assumes 60 min) | no (configurable, default 60 min) | yes, measured (reads the 5m/1h write split); the countdown shortens, no alarm |
+| Reads usage | per API request (`turn.step`) | status-line input | per API request (`turn.step`) | per turn (`turn.complete`) | per API request, plus the transcript via a Python script |
+| Shows | time left, context size, hit rate, misses, rewritten tokens; `/cache-keep` report | time left, hit rate, misses, tokens to re-cache | cold-write cost in USD | — | a band above the prompt: cache countdown, context fill, session quality, 5-hour and weekly limits, savings |
+| Needs | nothing | nothing | nothing | nothing | Python 3.9+; PolyForm Noncommercial license (work for an employer needs a commercial or small-business license) |
 
-### Where cache-keep fits
+In short: cache-keep is the small one. It does one job, prompt-cache visibility, with no model calls, no settings edits, no runtime beyond Claude Code and an MIT license. token-optimizer measures the TTL where cache-keep infers it, and does far more, but it rewrites your status line and needs Python. cache-clock shows most of the same numbers through your `statusLine`. cache-tax and cache-warmer exist to keep the cache warm, which cache-keep never does.
 
-- You are on a subscription (1-hour TTL) and want to know when the cache expires, and to catch a silent drop to 5 minutes.
-- You want nothing sent on your behalf: no pings, no extra usage.
+### Who it's for
 
-### Where it does not
+- **Your usage jumped and you don't know why.** A common hidden cause is the cache going cold: a 5-minute TTL, or long breaks. The miss count and the alarm show whether it is the cache, and `/cache-keep` gives the numbers to compare with a colleague.
+- **You work with a large context** (hundreds of thousands of tokens, or a 1M-context model). One cold rewrite there costs as much as many ordinary turns, so it pays to see the countdown before you step away.
+- **You step away often** (meetings, reviews, waiting on a build) and want to know whether to send the next message now or accept a rewrite.
+- **You already have a status line you like.** cache-keep adds one entry through the mod API and never touches `settings.json`.
+- **You want nothing sent on your behalf:** no pings, no extra usage, no extra process.
+- **You set `promptCacheTtl: "1h"` and want to confirm it holds.** The alarm stays quiet while it does.
+
+### Where it does not fit
 
 - **API-key, cloud or extra-usage sessions** run on a 5-minute TTL by design; there the alarm is noise. Use a 1-hour TTL setting or don't install it.
-- It cannot see the 5m/1h split of cache writes (the usage data does not carry it), so the alarm is an inference, not a measurement.
+- cache-keep does not read the 5m/1h split of cache writes, so the alarm is an inference, not a measurement. If you need the measured TTL and don't mind a managed status line and Python, use token-optimizer.
 - Where an organization manages Claude Code, installed plugins don't receive `session.compact`, so a rewrite right after compaction can count as a miss and toward the alarm.
 - If you want the cache kept warm through long breaks, use a keep-warm mod instead; cache-keep only shows and warns.
 
