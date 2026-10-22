@@ -1,14 +1,14 @@
 {
   "name": "cache-keep",
-  "version": "0.2.0",
-  "description": "Shows how long your prompt cache stays warm in the status line, and warns when it goes cold twice within an hour (5-minute TTL suspected). Zero model calls.",
+  "version": "0.3.0",
+  "description": "Prompt cache status line for Claude Code: time left, context size, hit rate and misses, a /cache-keep report, and an alarm when the cache goes cold twice within an hour (5-minute TTL suspected). Zero model calls.",
   "author": { "name": "maseungsidea" },
   "license": "MIT",
   "userConfig": {
     "language": {
       "type": "string",
       "title": "Language",
-      "description": "Language of the status line and the alarm.",
+      "description": "Language of the status line, the /cache-keep report and the alarm.",
       "default": "en",
       "options": ["en", "ko"]
     }

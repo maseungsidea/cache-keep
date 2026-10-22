@@ -2,8 +2,11 @@
 
 A Claude Code mod that tells you when your prompt cache **silently dropped to a 5-minute TTL**, with zero model calls and no settings edits.
 
-- **Status line:** `cache warm 47m · 312k` while the cache should be alive, `cache cold · next message rewrites 312k` once it has expired.
+- **Status line:** `🔥 cache warm ▰▰▰▰▱ 47m · 312k · hit 94% · 1 miss` while the cache should be alive, `🧊 cache cold · next message rewrites 312k` once it has expired. One bar cell = 12 minutes left; the miss count appears after the first miss.
+- **`/cache-keep`:** a report for the session — time left, context size, hit rate (input tokens read from cache), misses and the tokens they rewrote, and whether a 5-minute TTL is suspected. It answers at once, even mid-turn.
 - **Alarm:** if a large context is rewritten whole after a gap that a 1-hour cache should have survived (5–55 min), twice within a rolling hour, you get one toast: *5-minute TTL suspected — check `promptCacheTtl: "1h"`*.
+
+All of it counts the main thread only. A miss is a request that rewrote at least half of a 50k+ context; the first request of a session and the ones right after compaction or a model switch are not counted.
 
 ## Install
 
@@ -21,7 +24,7 @@ claude plugin install cache-keep --marketplace maseungsidea/cache-keep
 
 Answer `y` to add the marketplace, then pick a scope. In the desktop app: **+ → Plugins → Add marketplace**.
 
-The `language` option (`en` / `ko`) sets the language of the status line and the alarm.
+The `language` option (`en` / `ko`) sets the language of the status line, the report and the alarm.
 
 ## Why
 
@@ -38,7 +41,7 @@ Checked against cache mods found via claudemods.dev and GitHub as of 2026-10-22 
 | Blocks a message | no | no | first cold message, once (guard) | no |
 | Detects a 5-minute TTL drop | **yes** | no | no (assumes 60 min) | no (configurable, default 60 min) |
 | Reads usage | per API request (`turn.step`) | status-line input | per API request (`turn.step`) | per turn (`turn.complete`) |
-| Shows | minutes left, context size | **time left, hit rate, misses, tokens to re-cache** | cold-write cost in USD | — |
+| Shows | time left, context size, hit rate, misses, rewritten tokens; `/cache-keep` report | time left, hit rate, misses, tokens to re-cache | cold-write cost in USD | — |
 
 ### Where cache-keep fits
 
@@ -49,7 +52,7 @@ Checked against cache mods found via claudemods.dev and GitHub as of 2026-10-22 
 
 - **API-key, cloud or extra-usage sessions** run on a 5-minute TTL by design; there the alarm is noise. Use a 1-hour TTL setting or don't install it.
 - It cannot see the 5m/1h split of cache writes (the usage data does not carry it), so the alarm is an inference, not a measurement.
-- Where an organization manages Claude Code, installed plugins don't receive `session.compact`, so a rewrite right after compaction can count toward the alarm.
+- Where an organization manages Claude Code, installed plugins don't receive `session.compact`, so a rewrite right after compaction can count as a miss and toward the alarm.
 - If you want the cache kept warm through long breaks, use a keep-warm mod instead; cache-keep only shows and warns.
 
 ## Validation
