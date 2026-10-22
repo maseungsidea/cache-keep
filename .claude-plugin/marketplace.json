@@ -1,0 +1,13 @@
+{
+  "name": "cache-keep",
+  "description": "cache-keep: prompt cache status line and 5-minute TTL alarm for Claude Code",
+  "owner": {
+    "name": "maseungsidea"
+  },
+  "plugins": [
+    {
+      "name": "cache-keep",
+      "source": "./"
+    }
+  ]
+}
