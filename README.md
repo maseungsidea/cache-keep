@@ -1,12 +1,14 @@
 # cache-keep
 
-A Claude Code mod that tells you when your prompt cache **silently dropped to a 5-minute TTL**, with zero model calls and no settings edits.
+A Claude Code mod that tells you when your prompt cache **silently dropped to a 5-minute TTL**, with zero model calls and no settings edits. It reads the TTL from the session transcript, and infers it where the transcript can't be read.
 
-- **Status line:** `🔥 cache warm ▰▰▰▰▱ 47m · 312k · hit 94% · 1 miss` while the cache should be alive, `🧊 cache cold · next message rewrites 312k` once it has expired. One bar cell = 12 minutes left; the miss count appears after the first miss.
-- **`/cache-keep`:** a report for the session — time left, context size, hit rate (input tokens read from cache), misses and the tokens they rewrote, and whether a 5-minute TTL is suspected. It answers at once, even mid-turn.
-- **Alarm:** if a large context is rewritten whole after a gap that a 1-hour cache should have survived (5–55 min), twice within a rolling hour, you get one toast: *5-minute TTL suspected — check `promptCacheTtl: "1h"`*.
+- **Status line:** `🔥 cache warm ▰▰▰▰▱ 47m · 312k · hit 94% · 1 miss` while the cache should be alive, `🧊 cache cold · next message rewrites 312k` once it has expired. One bar cell = a fifth of the TTL (12 minutes at 1 hour); the miss count appears after the first miss. Under a measured 5-minute TTL the countdown runs from 5 and the line ends `· 5m TTL`.
+- **`/cache-keep`:** a report for the session — time left, context size, hit rate (input tokens read from cache), misses and the tokens they rewrote, and the cache TTL: measured, or inferred when it could not be measured. It answers at once, even mid-turn.
+- **Alarm:** one toast per session.
+  - **Measured:** after each main turn, cache-keep reads the newest cache write in the transcript (`cache_creation.ephemeral_5m/1h_input_tokens`). A 5-minute write raises *Prompt cache writes are 5-minute — check `promptCacheTtl: "1h"`*. A 1-hour write keeps the alarm quiet for the rest of the session.
+  - **Inferred:** until the TTL is measured, or wherever the transcript can't be read, a large context rewritten whole after a gap a 1-hour cache should have survived (5–55 min), twice within a rolling hour, raises *5-minute TTL suspected*.
 
-All of it counts the main thread only. A miss is a request that rewrote at least half of a 50k+ context; the first request of a session and the ones right after compaction or a model switch are not counted.
+All of it counts the main thread only; subagent writes in the transcript are skipped. A miss is a request that rewrote at least half of a 50k+ context; the first request of a session and the ones right after compaction or a model switch are not counted.
 
 ## Install
 
@@ -39,12 +41,12 @@ Checked against cache mods found via claudemods.dev and GitHub as of 2026-10-22 
 | Model calls | none | none | keep-warm pings: opt-in, auto-arms 3h after a cold write | keep-warm pings, always on | one per **Keep warm** press, never on a timer |
 | Edits your settings | no (`$.ui.status`) | yes, wraps your `statusLine` | no | no | yes, installs its own `statusLine` and restores it each session |
 | Blocks a message | no | no | first cold message, once (guard) | no | no |
-| Detects a 5-minute TTL drop | yes, inferred; one alarm toast | no | no (assumes 60 min) | no (configurable, default 60 min) | yes, measured (reads the 5m/1h write split); the countdown shortens, no alarm |
-| Reads usage | per API request (`turn.step`) | status-line input | per API request (`turn.step`) | per turn (`turn.complete`) | per API request, plus the transcript via a Python script |
+| Detects a 5-minute TTL drop | yes, measured from the transcript (inferred where it can't be read); the countdown shortens, one alarm toast | no | no (assumes 60 min) | no (configurable, default 60 min) | yes, measured (reads the 5m/1h write split); the countdown shortens, no alarm |
+| Reads usage | per API request (`turn.step`), plus the transcript's last 256 KB after each main turn | status-line input | per API request (`turn.step`) | per turn (`turn.complete`) | per API request, plus the transcript via a Python script |
 | Shows | time left, context size, hit rate, misses, rewritten tokens; `/cache-keep` report | time left, hit rate, misses, tokens to re-cache | cold-write cost in USD | — | a band above the prompt: cache countdown, context fill, session quality, 5-hour and weekly limits, savings |
 | Needs | nothing | nothing | nothing | nothing | Python 3.9+; PolyForm Noncommercial license (work for an employer needs a commercial or small-business license) |
 
-In short: cache-keep is the small one. It does one job, prompt-cache visibility, with no model calls, no settings edits, no runtime beyond Claude Code and an MIT license. token-optimizer measures the TTL where cache-keep infers it, and does far more, but it rewrites your status line and needs Python. cache-clock shows most of the same numbers through your `statusLine`. cache-tax and cache-warmer exist to keep the cache warm, which cache-keep never does.
+In short: cache-keep is the small one. It does one job, prompt-cache visibility, with no model calls, no settings edits, no runtime beyond Claude Code and an MIT license. Both cache-keep and token-optimizer measure the TTL from the transcript; token-optimizer does far more, but it rewrites your status line and needs Python. cache-clock shows most of the same numbers through your `statusLine`. cache-tax and cache-warmer exist to keep the cache warm, which cache-keep never does.
 
 ### Who it's for
 
@@ -53,18 +55,20 @@ In short: cache-keep is the small one. It does one job, prompt-cache visibility,
 - **You step away often** (meetings, reviews, waiting on a build) and want to know whether to send the next message now or accept a rewrite.
 - **You already have a status line you like.** cache-keep adds one entry through the mod API and never touches `settings.json`.
 - **You want nothing sent on your behalf:** no pings, no extra usage, no extra process.
-- **You set `promptCacheTtl: "1h"` and want to confirm it holds.** The alarm stays quiet while it does.
+- **You set `promptCacheTtl: "1h"` and want to confirm it holds.** `/cache-keep` shows the measured TTL, and the alarm stays quiet while it holds.
 
 ### Where it does not fit
 
-- **API-key, cloud or extra-usage sessions** run on a 5-minute TTL by design; there the alarm is noise. Use a 1-hour TTL setting or don't install it.
-- cache-keep does not read the 5m/1h split of cache writes, so the alarm is an inference, not a measurement. If you need the measured TTL and don't mind a managed status line and Python, use token-optimizer.
-- Where an organization manages Claude Code, installed plugins don't receive `session.compact`, so a rewrite right after compaction can count as a miss and toward the alarm.
+- **API-key, cloud or extra-usage sessions** run on a 5-minute TTL by design. There the countdown is right, but the alarm only tells you what you already chose. Use a 1-hour TTL setting, or don't install it.
+- Where an organization manages Claude Code, installed plugins don't receive `session.compact` or the `Stop` hook. So the TTL is inferred, never measured, and a rewrite right after compaction can count as a miss and toward the alarm.
+- The transcript is read with `tail`, or whole where there is no `tail` (Windows). A read stops at 4 MB, so a large session on Windows falls back to inference.
 - If you want the cache kept warm through long breaks, use a keep-warm mod instead; cache-keep only shows and warns.
 
 ## Validation
 
-The alarm logic was replayed over 30 days of real transcripts (497 main-thread sessions). It fired in 6 sessions, all on Claude Code 2.1.280 or older where a prompt-prefix change caused the rewrite; on 2.1.290+ it fired in none.
+The inferred alarm was replayed over 30 days of real transcripts (497 main-thread sessions). It fired in 6 sessions, all on Claude Code 2.1.280 or older where a prompt-prefix change caused the rewrite; on 2.1.290+ it fired in none.
+
+The measured path was checked headless on Claude Code 2.1.304: with the default settings it read a 1-hour write; with `--settings '{"promptCacheTtl":"5m"}'` it read a 5-minute write, shortened the countdown and raised the alarm; with `tail` failing it read the whole file instead.
 
 ## License
 
