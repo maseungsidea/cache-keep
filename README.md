@@ -5,7 +5,7 @@ A Claude Code mod that tells you when your prompt cache **silently dropped to a 
 - **Status line:** `🔥 cache warm ▰▰▰▰▱ 47m · 312k · hit 94% · 1 miss` while the cache should be alive, `🧊 cache cold · next message rewrites 312k` once it has expired. One bar cell = a fifth of the TTL (12 minutes at 1 hour); the miss count appears after the first miss. Under a measured 5-minute TTL the countdown runs from 5 and the line ends `· 5m TTL`.
 - **`/cache-keep`:** a report for the session — time left, context size, hit rate (input tokens read from cache), misses and the tokens they rewrote, and the cache TTL: measured, or inferred when it could not be measured. It answers at once, even mid-turn.
 - **Alarm:** one toast per session.
-  - **Measured:** after each main turn, cache-keep reads the newest cache write in the transcript (`cache_creation.ephemeral_5m/1h_input_tokens`). A 5-minute write raises *Prompt cache writes are 5-minute — check `promptCacheTtl: "1h"`*. A 1-hour write keeps the alarm quiet for the rest of the session.
+  - **Measured:** after each main turn, cache-keep reads the newest cache write in the transcript (`cache_creation.ephemeral_5m/1h_input_tokens`). A 5-minute write raises *Prompt cache writes are 5-minute — check `promptCacheTtl: "1h"`*. While writes stay 1-hour, the alarm stays quiet.
   - **Inferred:** until the TTL is measured, or wherever the transcript can't be read, a large context rewritten whole after a gap a 1-hour cache should have survived (5–55 min), twice within a rolling hour, raises *5-minute TTL suspected*.
 
 All of it counts the main thread only; subagent writes in the transcript are skipped. A miss is a request that rewrote at least half of a 50k+ context; the first request of a session and the ones right after compaction or a model switch are not counted.
@@ -67,6 +67,8 @@ In short: cache-keep is the small one. It does one job, prompt-cache visibility,
 ## Validation
 
 The inferred alarm was replayed over 30 days of real transcripts (497 main-thread sessions). It fired in 6 sessions, all on Claude Code 2.1.280 or older where a prompt-prefix change caused the rewrite; on 2.1.290+ it fired in none.
+
+The measured rule was replayed over the same 30 days (533 transcripts, 397 with the write split). No session mixed 1-hour and 5-minute main-thread writes, so a 1-hour session never raised the measured alarm. It fired in 8 sessions that wrote 5-minute from their first request: 6 SDK runs and 2 of the checks below.
 
 The measured path was checked headless on Claude Code 2.1.304: with the default settings it read a 1-hour write; with `--settings '{"promptCacheTtl":"5m"}'` it read a 5-minute write, shortened the countdown and raised the alarm; with `tail` failing it read the whole file instead.
 
