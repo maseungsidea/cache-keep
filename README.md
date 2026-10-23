@@ -16,7 +16,7 @@ All of it counts the main thread only; subagent writes in the transcript are ski
 
 ![A measured 5-minute TTL: the countdown runs from 5 and the report says to check promptCacheTtl](docs/alarm-5m.png)
 
-The screenshots are from real Claude Code 2.1.304 terminal sessions; the 5-minute one was forced with `--settings '{"promptCacheTtl":"5m"}'`.
+The screenshots are from real Claude Code 2.1.304 terminal sessions: the warm status line and the 1-hour report from a default session, the cold status line and the 5-minute report from one forced with `--settings '{"promptCacheTtl":"5m"}'`.
 
 ## Install
 
