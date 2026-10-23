@@ -1,6 +1,6 @@
 {
   "name": "cache-keep",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Prompt cache status line for Claude Code: time left, context size, hit rate and misses, a /cache-keep report, and the cache TTL measured from the session transcript, with an alarm on a 5-minute TTL (inferred where the transcript can't be read). Zero model calls.",
   "author": { "name": "maseungsidea" },
   "license": "MIT",

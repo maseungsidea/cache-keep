@@ -8,6 +8,10 @@ const BIG = 50_000
 const TAIL_BYTES = 262_144
 
 const MIN_MS = 60_000
+// The turn's last request reaches the transcript just after Stop returns
+const SETTLE_MS = 1_000
+// An alarm comes once a session; the default 4 s toast is easy to miss
+const ALARM_MS = 15_000
 
 export type Lang = 'en' | 'ko'
 
@@ -190,6 +194,19 @@ let isCompacted = false
 let earlyAt: number | undefined
 let tally = emptyTally()
 
+// Reads the newest main-thread cache write; a first 5-minute one raises the alarm
+async function measure($: Api, path: string, lang: Lang): Promise<void> {
+  const text = await readTail($, path)
+  const found = text === undefined ? undefined : lifetimeOf(text)
+  if (found === undefined || found === tally.measured) return
+  tally = { ...tally, measured: found }
+  if (found === '5m' && !tally.isAlarmed) {
+    tally = { ...tally, isAlarmed: true }
+    $.ui.toast(TEXT[lang].measuredAlarm, { timeoutMs: ALARM_MS })
+  }
+  $.ui.status(statusText(await $.clock.now(), lastAt, tokens, tally, lang))
+}
+
 export const register: Register = (on, options) => {
   const lang: Lang = options.language === 'ko' ? 'ko' : 'en'
 
@@ -219,15 +236,8 @@ export const register: Register = (on, options) => {
   // The usage a mod sees has no 5m/1h split; the transcript has it once the main turn ends. Unread, the inference below stands.
   on('classic.Stop', async ($, e, next) => {
     const result = await next(e)
-    const text = e.transcript_path ? await readTail($, e.transcript_path) : undefined
-    const found = text === undefined ? undefined : lifetimeOf(text)
-    if (found === undefined || found === tally.measured) return result
-    tally = { ...tally, measured: found }
-    if (found === '5m' && !tally.isAlarmed) {
-      tally = { ...tally, isAlarmed: true }
-      $.ui.toast(TEXT[lang].measuredAlarm)
-    }
-    $.ui.status(statusText(await $.clock.now(), lastAt, tokens, tally, lang))
+    const path = e.transcript_path
+    if (path) $.clock.after(SETTLE_MS, () => void measure($, path, lang))
     return result
   }).catch(($, e, next) => next(e))
 
@@ -243,7 +253,7 @@ export const register: Register = (on, options) => {
       tally = { ...tally, earlyColds: tally.earlyColds + 1 }
       if (!tally.isAlarmed && isRepeat(earlyAt, now)) {
         tally = { ...tally, isAlarmed: true }
-        $.ui.toast(TEXT[lang].alarm)
+        $.ui.toast(TEXT[lang].alarm, { timeoutMs: ALARM_MS })
       }
       earlyAt = now
     }

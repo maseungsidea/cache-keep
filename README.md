@@ -78,7 +78,7 @@ The inferred alarm was replayed over 30 days of real transcripts (497 main-threa
 
 The measured rule was replayed over the same 30 days (533 transcripts, 397 with the write split). No session mixed 1-hour and 5-minute main-thread writes, so a 1-hour session never raised the measured alarm. It fired in 8 sessions that wrote 5-minute from their first request: 6 SDK runs and 2 of the checks below.
 
-The measured path was checked headless on Claude Code 2.1.304: with the default settings it read a 1-hour write; with `--settings '{"promptCacheTtl":"5m"}'` it read a 5-minute write, shortened the countdown and raised the alarm; with `tail` failing it read the whole file instead.
+The measured path was checked headless on Claude Code 2.1.304: with the default settings it read a 1-hour write; with `--settings '{"promptCacheTtl":"5m"}'` it read a 5-minute write, shortened the countdown and raised the alarm; with `tail` failing it read the whole file instead. In an interactive terminal session the turn's last request reaches the transcript just after the turn ends, so cache-keep reads it a second later: under a forced 5-minute TTL the status line said `5m TTL` about two seconds after the first reply, and the alarm toast stayed for its 15 seconds.
 
 ## License
 
