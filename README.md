@@ -2,6 +2,8 @@
 
 A Claude Code mod that tells you when your prompt cache **silently dropped to a 5-minute TTL**, with zero model calls and no settings edits. It reads the TTL from the session transcript, and infers it where the transcript can't be read.
 
+![The status line while the cache is warm, and once it has gone cold](docs/status-line.png)
+
 - **Status line:** `🔥 cache warm ▰▰▰▰▱ 47m · 312k · hit 94% · 1 miss` while the cache should be alive, `🧊 cache cold · next message rewrites 312k` once it has expired. One bar cell = a fifth of the TTL (12 minutes at 1 hour); the miss count appears after the first miss. Under a measured 5-minute TTL the countdown runs from 5 and the line ends `· 5m TTL`.
 - **`/cache-keep`:** a report for the session — time left, context size, hit rate (input tokens read from cache), misses and the tokens they rewrote, and the cache TTL: measured, or inferred when it could not be measured. It answers at once, even mid-turn.
 - **Alarm:** one toast per session.
@@ -9,6 +11,12 @@ A Claude Code mod that tells you when your prompt cache **silently dropped to a 
   - **Inferred:** until the TTL is measured, or wherever the transcript can't be read, a large context rewritten whole after a gap a 1-hour cache should have survived (5–55 min), twice within a rolling hour, raises *5-minute TTL suspected*.
 
 All of it counts the main thread only; subagent writes in the transcript are skipped. A miss is a request that rewrote at least half of a 50k+ context; the first request of a session and the ones right after compaction or a model switch are not counted.
+
+![The /cache-keep report with a 1-hour TTL measured from the transcript](docs/report.png)
+
+![A measured 5-minute TTL: the countdown runs from 5 and the report says to check promptCacheTtl](docs/alarm-5m.png)
+
+The screenshots are from real Claude Code 2.1.304 terminal sessions; the 5-minute one was forced with `--settings '{"promptCacheTtl":"5m"}'`.
 
 ## Install
 
