@@ -68,8 +68,8 @@ In short: cache-keep is the small one. It does one job, prompt-cache visibility,
 ### Where it does not fit
 
 - **API-key, cloud or extra-usage sessions** run on a 5-minute TTL by design. There the countdown is right, but the alarm only tells you what you already chose. Use a 1-hour TTL setting, or don't install it.
-- Where an organization manages Claude Code, installed plugins don't receive `session.compact` or the `Stop` hook. So the TTL is inferred, never measured, and a rewrite right after compaction can count as a miss and toward the alarm.
-- The transcript is read with `tail`, or whole where there is no `tail` (Windows). A read stops at 4 MB, so a large session on Windows falls back to inference.
+- Where an organization manages Claude Code, installed plugins don't receive `session.compact` or the `Stop` hook. cache-keep then looks the transcript up under the projects folder itself, so the TTL is still measured, but a rewrite right after compaction can count as a miss. Where the organization allows only its own hooks (`allowManagedHooksOnly`), cache-keep doesn't run at all.
+- The transcript is read with `tail`, or whole where there is no `tail` (Windows). A whole read stops at 4 MB. A session is measured in its first turns, while it is small, and keeps that reading, so on Windows only a session resumed when already past 4 MB falls back to inference.
 - If you want the cache kept warm through long breaks, use a keep-warm mod instead; cache-keep only shows and warns.
 
 ## Validation
@@ -78,7 +78,7 @@ The inferred alarm was replayed over 30 days of real transcripts (497 main-threa
 
 The measured rule was replayed over the same 30 days (533 transcripts, 397 with the write split). No session mixed 1-hour and 5-minute main-thread writes, so a 1-hour session never raised the measured alarm. It fired in 8 sessions that wrote 5-minute from their first request: 6 SDK runs and 2 of the checks below.
 
-The measured path was checked headless on Claude Code 2.1.304: with the default settings it read a 1-hour write; with `--settings '{"promptCacheTtl":"5m"}'` it read a 5-minute write, shortened the countdown and raised the alarm; with `tail` failing it read the whole file instead. In an interactive terminal session the turn's last request reaches the transcript just after the turn ends, so cache-keep reads it a second later: under a forced 5-minute TTL the status line said `5m TTL` about two seconds after the first reply, and the alarm toast stayed for its 15 seconds.
+The measured path was checked headless on Claude Code 2.1.304: with the default settings it read a 1-hour write; with `--settings '{"promptCacheTtl":"5m"}'` it read a 5-minute write, shortened the countdown and raised the alarm; with `tail` failing it read the whole file instead. In an interactive terminal session the turn's last request reaches the transcript just after the turn ends, so cache-keep reads it a second later, and once more five seconds on if that read found nothing. On 2.1.309 under a forced 5-minute TTL the status line said `5m TTL` about a second after the first reply, and the alarm toast stayed for its 15 seconds. The same held with the `Stop` hook removed from a copy of the mod, standing in for a managed install, which was not itself tested.
 
 ## License
 

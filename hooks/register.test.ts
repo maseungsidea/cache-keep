@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { bar, count, emptyTally, hitRate, isEarlyCold, isRepeat, isRewrite, lifetimeOf, report, statusText } from './register'
+import { bar, count, emptyTally, hitRate, isEarlyCold, isRepeat, isRewrite, lifetimeOf, report, slugOf, statusText } from './register'
 
 const use = (read: number, write: number, input = 2) => ({
   input_tokens: input,
@@ -122,4 +122,9 @@ test('the report names a measured TTL over the inference', async () => {
   expect(short[1]).toBe('- Now: warm, 2 min left (last request 3 min ago)')
   expect(short[5]).toBe('- Cache TTL: 5 minutes (measured from the transcript) — check setting promptCacheTtl: "1h"')
   expect(report(T0 + min(13), T0, 312_000, { ...t, measured: '1h' }, 'ko').split('\n').slice(-1)).toEqual(['- 캐시 TTL: 1시간 (전사에서 측정)'])
+})
+
+test('a session directory maps to its projects folder name', async () => {
+  expect(slugOf('/Users/alex/Projects/cache-keep')).toBe('-Users-alex-Projects-cache-keep')
+  expect(slugOf('/private/tmp/work/-Users-alex-.claude-spares')).toBe('-private-tmp-work--Users-alex--claude-spares')
 })

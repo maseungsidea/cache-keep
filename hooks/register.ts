@@ -8,8 +8,10 @@ const BIG = 50_000
 const TAIL_BYTES = 262_144
 
 const MIN_MS = 60_000
-// The turn's last request reaches the transcript just after Stop returns
+// The turn's last request reaches the transcript just after the turn ends
 const SETTLE_MS = 1_000
+// A first read that comes back empty is tried once more
+const RETRY_MS = 5_000
 // An alarm comes once a session; the default 4 s toast is easy to miss
 const ALARM_MS = 15_000
 
@@ -193,18 +195,48 @@ let lastModel: string | undefined
 let isCompacted = false
 let earlyAt: number | undefined
 let tally = emptyTally()
+let transcript: string | undefined
 
-// Reads the newest main-thread cache write; a first 5-minute one raises the alarm
-async function measure($: Api, path: string, lang: Lang): Promise<void> {
-  const text = await readTail($, path)
+// The projects folder names a session's directory with every character but letters and digits turned to '-'
+export const slugOf = (dir: string) => dir.replace(/[^A-Za-z0-9]/g, '-')
+
+// Where no Stop hook hands over the path (an organization-managed install): <config>/projects/<dir>/<session id>.jsonl
+async function findTranscript($: Api): Promise<string | undefined> {
+  const home = (await $.env.get('HOME')) ?? (await $.env.get('USERPROFILE'))
+  const config = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? (home === undefined ? undefined : `${home}/.claude`)
+  if (config === undefined) return undefined
+  const projects = `${config}/projects`
+  const name = `${await $.session.id()}.jsonl`
+  const first = `${projects}/${slugOf(await $.session.root())}/${name}`
+  if (await $.fs.exists(first).catch(() => false)) return first
+  // A moved root or a long path's shortened name: look in every project folder
+  for (const entry of await $.fs.list(projects).catch(() => [])) {
+    const path = `${projects}/${entry.name}/${name}`
+    if (entry.kind === 'dir' && (await $.fs.exists(path).catch(() => false))) return path
+  }
+  return undefined
+}
+
+// Reads the newest main-thread cache write; a first 5-minute one raises the alarm. False when nothing was read.
+async function measure($: Api, lang: Lang): Promise<boolean> {
+  transcript ??= await findTranscript($)
+  if (transcript === undefined) return false
+  const text = await readTail($, transcript)
   const found = text === undefined ? undefined : lifetimeOf(text)
-  if (found === undefined || found === tally.measured) return
+  if (found === undefined) return false
+  if (found === tally.measured) return true
   tally = { ...tally, measured: found }
   if (found === '5m' && !tally.isAlarmed) {
     tally = { ...tally, isAlarmed: true }
     $.ui.toast(TEXT[lang].measuredAlarm, { timeoutMs: ALARM_MS })
   }
   $.ui.status(statusText(await $.clock.now(), lastAt, tokens, tally, lang))
+  return true
+}
+
+// After a main turn: read, and once more a little later if the first read found nothing
+async function measureAfterTurn($: Api, lang: Lang): Promise<void> {
+  if (!(await measure($, lang).catch(() => false))) $.clock.after(RETRY_MS, () => void measure($, lang).catch(() => false))
 }
 
 export const register: Register = (on, options) => {
@@ -218,6 +250,7 @@ export const register: Register = (on, options) => {
     isCompacted = false
     earlyAt = undefined
     tally = emptyTally()
+    transcript = undefined
     await $.command.register({ name: 'cache-keep', description: TEXT[lang].command, immediate: true })
     timer?.cancel()
     timer = $.clock.every(MIN_MS, async () => {
@@ -233,13 +266,18 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  // The usage a mod sees has no 5m/1h split; the transcript has it once the main turn ends. Unread, the inference below stands.
+  // Stop names the transcript; where an organization manages Claude Code it never comes, and the path is looked up instead
   on('classic.Stop', async ($, e, next) => {
-    const result = await next(e)
-    const path = e.transcript_path
-    if (path) $.clock.after(SETTLE_MS, () => void measure($, path, lang))
-    return result
+    if (e.transcript_path) transcript = e.transcript_path
+    return next(e)
   }).catch(($, e, next) => next(e))
+
+  // The usage a mod sees has no 5m/1h split; the transcript has it once the main turn ends. Unread, the inference below stands.
+  on('turn.complete', async ($, e, next) => {
+    const result = await next(e)
+    if (!e.agentId) $.clock.after(SETTLE_MS, () => void measureAfterTurn($, lang))
+    return result
+  })
 
   on('turn.step', async function* ($, e, next) {
     const r = yield* next(e)
